@@ -1,0 +1,44 @@
+{
+  "_note": "DEMO seed / preview fixture only — NOT a real ledger. Holdings and budgets are fictional sample data for local preview & tests. Production ledger lives server-side at ~/.cockpit/mstr-tracker/mstr-state.json and is never overwritten by deploys. Local preview: MSTR_STATE=mstr-state.seed.json.",
+  "updated": "2026-01-15T10:00:00+10:00",
+  "currency": "USD",
+  "rate_rmb_per_usd": 7.2,
+  "held_shares": 0,
+  "invested_usd": 0,
+  "avg_cost_usd": 0,
+  "budget_core_usd": 14000,
+  "budget_swan_usd": 14000,
+  "rounds": [
+    {"id": "T1", "name": "T1 lead entry", "layer": "core", "budget_usd": 6300, "sem": "amber",
+     "signal": "mNAV 0.78-1.0x / $100-145 / BTC $62-70K", "trigger_kind": "price", "status": "open",
+     "plan": [
+       {"label": "T1-a", "price": 130, "usd": 1890, "shares": 14.5, "trig": "$130 / 30%", "status": "open"},
+       {"label": "T1-b", "price": 118, "usd": 2520, "shares": 21.4, "trig": "$118 / 40%", "status": "open"},
+       {"label": "T1-c", "price": 105, "usd": 1890, "shares": 18, "trig": "$105 / 30%", "status": "open"}
+     ], "fills": []},
+    {"id": "T2", "name": "T2 green-line core", "layer": "core", "budget_usd": 7700, "sem": "green",
+     "signal": "mNAV 0.65-0.78x / $80-105 / BTC $55-62K", "trigger_kind": "mnav", "status": "open",
+     "plan": [
+       {"label": "T2-a", "mnav": 0.78, "price": 101, "usd": 2695, "shares": 27, "trig": "mNAV<=0.78x / 35%", "status": "open"},
+       {"label": "T2-b", "mnav": 0.70, "price": 91, "usd": 2695, "shares": 30, "trig": "mNAV<=0.70x / 35%", "status": "open"},
+       {"label": "T2-c", "mnav": 0.65, "price": 84, "usd": 2310, "shares": 27, "trig": "mNAV<=0.65x / 30%", "status": "open"}
+     ], "fills": []},
+    {"id": "A", "name": "Black-swan A (high prob)", "layer": "swan", "budget_usd": 7000, "sem": "red",
+     "signal": "core full + black line breaks green: BTC $55-58K / mNAV 0.55-0.7x", "trigger_kind": "mnav", "status": "wait",
+     "plan": [
+       {"label": "A-1", "mnav": 0.70, "price": 90, "usd": 3500, "shares": 39, "trig": "mNAV~0.7x", "status": "open"},
+       {"label": "A-2", "mnav": 0.60, "price": 77, "usd": 3500, "shares": 45, "trig": "mNAV~0.6x", "status": "open"}
+     ], "fills": []},
+    {"id": "B", "name": "Black-swan B (low prob)", "layer": "swan", "budget_usd": 7000, "sem": "rust",
+     "signal": "BTC<$50K or mNAV<0.5x (MSTR<$70)", "trigger_kind": "mnav", "status": "wait",
+     "plan": [
+       {"label": "B-1", "mnav": 0.50, "price": 60, "usd": 3500, "shares": 58, "trig": "mNAV~0.5x", "status": "open"},
+       {"label": "B-2", "mnav": 0.40, "price": 45, "usd": 3500, "shares": 78, "trig": "mNAV<0.4x", "status": "open"}
+     ], "fills": []}
+  ],
+  "exits": [
+    {"label": "Exit 1", "cond": "BTC $100K / MSTR ~$357", "pct": 20},
+    {"label": "Exit 2", "cond": "BTC $126K / MSTR ~$636", "pct": 30},
+    {"label": "Exit 3", "cond": "BTC $180-230K / MSTR $800-1225", "pct": 50}
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "_note": "DEMO seed / preview fixture only — NOT a real ledger. All holdings, budgets and fills below are fictional sample data for local preview & tests. In production the authoritative ledger lives server-side at ~/.cockpit/btc-tracker/state.json and is never overwritten by deploys. Local preview: BTC_STATE=state.seed.json.",
+  "updated": "2026-01-15T10:00:00+10:00",
+  "held_btc": 0.15,
+  "invested_rmb": 60000,
+  "avg_cost_usd": 60000,
+  "budget_total_rmb": 300000,
+  "rate_rmb_per_usdt": 7.2,
+  "tracks": [
+    { "name": "Total budget used", "used": 60000, "quota": 300000, "color": "green" },
+    { "name": "DCA", "used": 6000, "quota": 30000, "color": "blue" },
+    { "name": "B core dip-buy", "used": 18000, "quota": 120000, "color": "amber" },
+    { "name": "C deep-dip reserve", "used": 0, "quota": 40000, "color": "red" }
+  ],
+  "tiers": [
+    {
+      "name": "B1 probe", "lo": 66000, "hi": 70000, "amount": 12000, "status": "partial", "sem": "amber",
+      "plan": [
+        { "label": "B1-b", "price": 66000, "rmb": 6000, "status": "open" }
+      ],
+      "fills": [
+        { "label": "B1-a", "price": 69000, "rmb": 6000, "usd": 857.14, "btc": 0.01242236, "at": "2026-01-10T10:15:00+10:00" }
+      ]
+    },
+    {
+      "name": "B2 core", "lo": 60000, "hi": 66000, "amount": 28000, "status": "open", "sem": "amber",
+      "plan": [
+        { "label": "B2-a", "price": 64000, "rmb": 14000, "status": "open" },
+        { "label": "B2-b", "price": 61000, "rmb": 14000, "status": "open" }
+      ],
+      "fills": []
+    },
+    {
+      "name": "B3 green line", "lo": 55000, "hi": 60000, "amount": 48000, "status": "open", "sem": "green",
+      "plan": [
+        { "label": "B3-a", "price": 59000, "rmb": 16000, "status": "open" },
+        { "label": "B3-b", "price": 57000, "rmb": 16000, "status": "open" },
+        { "label": "B3-c", "price": 55000, "rmb": 16000, "status": "open" }
+      ],
+      "fills": []
+    },
+    {
+      "name": "C1 deep dip", "lo": 52000, "hi": 55000, "amount": 16000, "status": "wait", "sem": "red",
+      "plan": [
+        { "label": "C1-a", "price": 54000, "rmb": 8000, "status": "open" },
+        { "label": "C1-b", "price": 52000, "rmb": 8000, "status": "open" }
+      ],
+      "fills": []
+    },
+    {
+      "name": "C2 deep dip", "lo": 48000, "hi": 52000, "amount": 14000, "status": "wait", "sem": "red",
+      "plan": [
+        { "label": "C2-a", "price": 51000, "rmb": 7000, "status": "open" },
+        { "label": "C2-b", "price": 48000, "rmb": 7000, "status": "open" }
+      ],
+      "fills": []
+    }
+  ],
+  "onchain": [
+    { "name": "Triple bottom", "frac": 0.67, "note": "second prong done", "sem": "green" },
+    { "name": "4-year cycle", "frac": 0.94, "note": "0.94 / 1.0", "sem": "amber" },
+    { "name": "Fear & Greed", "frac": 0.26, "note": "26 extreme fear", "sem": "red" }
+  ]
+}

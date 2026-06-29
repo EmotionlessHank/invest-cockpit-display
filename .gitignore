@@ -1,0 +1,30 @@
+# Runtime ledger files are never committed (server is authoritative); seeds/*.seed.json is the only exception
+*state.json
+*state.bak.json
+!seeds/*.seed.json
+
+# On-chain signal cache (cron-generated derived data, not ledger and not source)
+onchain_cache.json
+onchain_cache.tmp
+
+# Secrets and keys
+.env
+*.pem
+id_*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local build artifacts
+*.png
+.DS_Store
+
+# OMC tool state
+.omc/
+!app/apple-touch-icon.png
+
+# Server snapshot directory (server-snapshot) — contains plaintext ledger/config, never commit
+/backups/
+!docs/dashboard-en.png

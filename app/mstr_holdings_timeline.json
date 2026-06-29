@@ -1,0 +1,261 @@
+{
+ "_comment": "Stepped timeline for mNAV history backfill. Metric: saylortracker navPremiumDiluted (debt-free / diluted shares). Each entry = cumulative holdings + post-ATM diluted shares disclosed in that week's 8-K filing. For a given date, use the most recent entry on or before that date. Source: MSTR 8-K filings (authoritative); append after each new 8-K.",
+ "caliber": "diluted_no_debt",
+ "timeline": [
+  {
+   "date": "2025-05-26",
+   "btc_holdings": 580250,
+   "diluted_shares_m": 312.737
+  },
+  {
+   "date": "2025-06-01",
+   "btc_holdings": 580955,
+   "diluted_shares_m": 312.778
+  },
+  {
+   "date": "2025-06-09",
+   "btc_holdings": 582001,
+   "diluted_shares_m": 312.82
+  },
+  {
+   "date": "2025-06-16",
+   "btc_holdings": 592100,
+   "diluted_shares_m": 312.883
+  },
+  {
+   "date": "2025-06-23",
+   "btc_holdings": 592345,
+   "diluted_shares_m": 312.903
+  },
+  {
+   "date": "2025-06-29",
+   "btc_holdings": 597325,
+   "diluted_shares_m": 314.243
+  },
+  {
+   "date": "2025-07-14",
+   "btc_holdings": 601550,
+   "diluted_shares_m": 315.127
+  },
+  {
+   "date": "2025-07-21",
+   "btc_holdings": 607770,
+   "diluted_shares_m": 316.705
+  },
+  {
+   "date": "2025-07-29",
+   "btc_holdings": 628791,
+   "diluted_shares_m": 316.705
+  },
+  {
+   "date": "2025-08-11",
+   "btc_holdings": 628946,
+   "diluted_shares_m": 316.71
+  },
+  {
+   "date": "2025-08-18",
+   "btc_holdings": 629376,
+   "diluted_shares_m": 316.727
+  },
+  {
+   "date": "2025-08-25",
+   "btc_holdings": 632457,
+   "diluted_shares_m": 317.624
+  },
+  {
+   "date": "2025-09-02",
+   "btc_holdings": 636505,
+   "diluted_shares_m": 318.877
+  },
+  {
+   "date": "2025-09-08",
+   "btc_holdings": 638460,
+   "diluted_shares_m": 319.486
+  },
+  {
+   "date": "2025-09-15",
+   "btc_holdings": 638985,
+   "diluted_shares_m": 319.5
+  },
+  {
+   "date": "2025-09-22",
+   "btc_holdings": 639835,
+   "diluted_shares_m": 319.727
+  },
+  {
+   "date": "2025-09-29",
+   "btc_holdings": 640031,
+   "diluted_shares_m": 320.04
+  },
+  {
+   "date": "2025-10-13",
+   "btc_holdings": 640250,
+   "diluted_shares_m": 320.067
+  },
+  {
+   "date": "2025-10-20",
+   "btc_holdings": 640418,
+   "diluted_shares_m": 320.071
+  },
+  {
+   "date": "2025-10-27",
+   "btc_holdings": 640808,
+   "diluted_shares_m": 320.089
+  },
+  {
+   "date": "2025-11-03",
+   "btc_holdings": 641205,
+   "diluted_shares_m": 320.277
+  },
+  {
+   "date": "2025-11-10",
+   "btc_holdings": 641692,
+   "diluted_shares_m": 320.282
+  },
+  {
+   "date": "2025-11-17",
+   "btc_holdings": 649870,
+   "diluted_shares_m": 320.283
+  },
+  {
+   "date": "2025-12-01",
+   "btc_holdings": 650000,
+   "diluted_shares_m": 328.51
+  },
+  {
+   "date": "2025-12-08",
+   "btc_holdings": 660624,
+   "diluted_shares_m": 333.631
+  },
+  {
+   "date": "2025-12-15",
+   "btc_holdings": 671268,
+   "diluted_shares_m": 338.444
+  },
+  {
+   "date": "2025-12-22",
+   "btc_holdings": 671268,
+   "diluted_shares_m": 342.978
+  },
+  {
+   "date": "2025-12-29",
+   "btc_holdings": 672497,
+   "diluted_shares_m": 343.641
+  },
+  {
+   "date": "2025-12-31",
+   "btc_holdings": 672500,
+   "diluted_shares_m": 344.897
+  },
+  {
+   "date": "2026-01-05",
+   "btc_holdings": 673783,
+   "diluted_shares_m": 345.632
+  },
+  {
+   "date": "2026-01-12",
+   "btc_holdings": 687410,
+   "diluted_shares_m": 352.204
+  },
+  {
+   "date": "2026-01-20",
+   "btc_holdings": 709715,
+   "diluted_shares_m": 362.606
+  },
+  {
+   "date": "2026-01-26",
+   "btc_holdings": 712647,
+   "diluted_shares_m": 364.173
+  },
+  {
+   "date": "2026-02-02",
+   "btc_holdings": 713502,
+   "diluted_shares_m": 364.845
+  },
+  {
+   "date": "2026-02-09",
+   "btc_holdings": 714644,
+   "diluted_shares_m": 365.461
+  },
+  {
+   "date": "2026-02-17",
+   "btc_holdings": 717131,
+   "diluted_shares_m": 366.114
+  },
+  {
+   "date": "2026-02-23",
+   "btc_holdings": 717722,
+   "diluted_shares_m": 366.419
+  },
+  {
+   "date": "2026-03-02",
+   "btc_holdings": 720737,
+   "diluted_shares_m": 368.154
+  },
+  {
+   "date": "2026-03-09",
+   "btc_holdings": 738731,
+   "diluted_shares_m": 374.506
+  },
+  {
+   "date": "2026-03-16",
+   "btc_holdings": 761068,
+   "diluted_shares_m": 377.34
+  },
+  {
+   "date": "2026-03-23",
+   "btc_holdings": 762099,
+   "diluted_shares_m": 377.847
+  },
+  {
+   "date": "2026-04-06",
+   "btc_holdings": 766970,
+   "diluted_shares_m": 379.425
+  },
+  {
+   "date": "2026-04-13",
+   "btc_holdings": 780897,
+   "diluted_shares_m": 379.423
+  },
+  {
+   "date": "2026-04-20",
+   "btc_holdings": 815061,
+   "diluted_shares_m": 381.588
+  },
+  {
+   "date": "2026-04-27",
+   "btc_holdings": 818334,
+   "diluted_shares_m": 383.036
+  },
+  {
+   "date": "2026-05-11",
+   "btc_holdings": 818869,
+   "diluted_shares_m": 383.741
+  },
+  {
+   "date": "2026-05-18",
+   "btc_holdings": 843738,
+   "diluted_shares_m": 384.169
+  },
+  {
+   "date": "2026-06-01",
+   "btc_holdings": 843706,
+   "diluted_shares_m": 382.756
+  },
+  {
+   "date": "2026-06-08",
+   "btc_holdings": 845256,
+   "diluted_shares_m": 384.18
+  },
+  {
+   "date": "2026-06-15",
+   "btc_holdings": 846842,
+   "diluted_shares_m": 386.052
+  },
+  {
+   "date": "2026-06-22",
+   "btc_holdings": 847363,
+   "diluted_shares_m": 388.617
+  }
+ ]
+}
