@@ -3,7 +3,7 @@
 import json
 import pathlib
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 
 import onchain_signals as oc
 
@@ -49,6 +49,21 @@ BRK_OK = {
     f"{oc.BRK_BASE}/price_sma_200w/1d/latest": 61500.0,
 }
 FNG_OK = {oc.FNG_URL: {"data": [{"value": "12", "value_classification": "Extreme Fear"}]}}
+
+
+def _kline_row(date_str, o, h, l, c):
+    ts = int(datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+    return [ts, o, h, l, c, "100.0", ts + 86_399_999, "0", 0, "0", "0", "0"]
+
+
+# Cycle-low fixture: ATH on 2025-10-06 ($126,199.63), cycle low on 2026-07-01 ($57,800.19)
+KLINES_OK = [
+    _kline_row("2025-10-04", 122232.21, 122800.0, 121510.0, 122391.0),
+    _kline_row("2025-10-06", 123482.32, 126199.63, 123084.0, 124658.54),
+    _kline_row("2026-06-29", 59577.01, 60780.57, 58900.01, 60260.21),
+    _kline_row("2026-07-01", 58624.71, 61334.0, 57800.19, 60024.0),
+    _kline_row("2026-07-05", 63144.01, 63999.0, 62436.59, 63650.0),
+]
 
 
 def t_all_ok():
@@ -118,7 +133,7 @@ def t_zombie_section_pruned():
         p.write_text('{"vdd": {"ok": true, "data": {}}, "fng": {"ok": true}}', encoding="utf-8")
         oc._get_json = fake_responses({**BRK_OK, **FNG_OK})
         c = oc.refresh(now=NOW, path=p)
-        ok("zombie vdd section cleared", "vdd" not in c and set(c) == {"brk", "fng", "cycle"})  # cycle source registered with the cycle clock
+        ok("zombie vdd section cleared", "vdd" not in c and set(c) == {"brk", "fng", "cycle", "cycle_low"})  # cycle + cycle_low sources registered
 
 
 # ── B-L1 tests (L1-1 ~ L1-6) ─────────────────────────────────
@@ -314,6 +329,133 @@ def t_dd013_cycle_source_in_refresh():
         ok("cycle fetched_at keeps old time (honest staleness)", c2["cycle"]["fetched_at"].startswith("2026-06-06"))
 
 
+# ── Cycle low (this cycle's lowest price so far) ────────────────────────────
+def t_cycle_low_compute_pure():
+    print("· compute_cycle_extremes: pure min/max pick, empty -> None")
+    bars = [("2025-10-04", 122800.0, 121510.0), ("2025-10-06", 126199.63, 123084.0),
+            ("2026-07-01", 61334.0, 57800.19)]
+    r = oc.compute_cycle_extremes(bars)
+    ok("ath = highest high", r["ath"] == 126199.63)
+    ok("ath_date matches", r["ath_date"] == "2025-10-06")
+    ok("low = lowest low", r["low"] == 57800.19)
+    ok("low_date matches", r["low_date"] == "2026-07-01")
+    ok("empty input -> None", oc.compute_cycle_extremes([]) is None)
+
+
+def t_cycle_low_fetch_basic():
+    print("· fetch_cycle_low: scans klines since CYCLE_WINDOW_START; first fetch bypasses jump guard")
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: KLINES_OK})
+    r = oc.fetch_cycle_low(old_data=None)
+    ok("low picked correctly", r["low"] == 57800.19)
+    ok("low_date picked correctly", r["low_date"] == "2026-07-01")
+    ok("ath picked correctly", r["ath"] == 126199.63)
+    ok("ath_date picked correctly", r["ath_date"] == "2025-10-06")
+    ok("no suspect flag on first fetch", "low_suspect" not in r)
+
+
+def t_cycle_low_guard_out_of_band():
+    print("· fetch_cycle_low: out-of-sanity-band low -> rejected, keeps old, flagged suspect")
+    bad_rows = [_kline_row("2026-07-01", 10000.0, 10000.0, 5_000.0, 10000.0)]  # below ANCHOR_GUARD floor
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: bad_rows})
+    r = oc.fetch_cycle_low(old_data={"low": 57800.19, "low_date": "2026-07-01"})
+    ok("suspect low rejected, old value kept", r["low"] == 57800.19)
+    ok("suspect flag set", r.get("low_suspect") is True)
+
+
+def t_cycle_low_guard_daily_jump():
+    print("· fetch_cycle_low: >20% drop from old cached low -> rejected as suspect")
+    rows = [_kline_row("2026-07-10", 45000.0, 45500.0, 40_000.0, 44000.0)]  # 30.8% below old low
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: rows})
+    r = oc.fetch_cycle_low(old_data={"low": 57800.19, "low_date": "2026-07-01"})
+    ok("jump-guard rejects the new low", r["low"] == 57800.19)
+    ok("suspect flag set", r.get("low_suspect") is True)
+
+
+def t_cycle_low_no_data_raises():
+    print("· fetch_cycle_low: empty klines response -> raises (refresh() degrades gracefully)")
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: []})
+    try:
+        oc.fetch_cycle_low(old_data=None)
+        ok("should have raised", False)
+    except RuntimeError:
+        ok("raises RuntimeError on empty response", True)
+
+
+def t_cycle_low_jump_confirmed_second_fetch():
+    print("· fetch_cycle_low: a real sustained new low (recomputed identically) is accepted on the 2nd consecutive fetch")
+    rows = [_kline_row("2026-07-10", 45000.0, 45500.0, 40_000.0, 44000.0)]  # 30.8% below old low — same fixture as the jump-guard test
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: rows})
+    r1 = oc.fetch_cycle_low(old_data={"low": 57800.19, "low_date": "2026-07-01"})
+    ok("1st fetch: rejected, old value kept, pending recorded", r1["low"] == 57800.19 and r1.get("low_suspect") is True)
+    ok("1st fetch: _pending_low carries the candidate for next time", (r1.get("_pending_low") or {}).get("v") == 40000.0)
+    # 2nd fetch: same source data recomputes the identical candidate (real closed historical bars
+    # don't change) -> matches the carried-forward pending -> now accepted
+    r2 = oc.fetch_cycle_low(old_data=r1)
+    ok("2nd fetch: candidate confirmed twice -> now accepted", r2["low"] == 40000.0)
+    ok("2nd fetch: low_date updated to the new low's date", r2["low_date"] == "2026-07-10")
+    ok("2nd fetch: no longer suspect once accepted", "low_suspect" not in r2)
+    ok("2nd fetch: pending cleared once accepted", "_pending_low" not in r2)
+
+
+def t_cycle_low_glitch_never_confirms():
+    print("· fetch_cycle_low: a one-off glitch that doesn't reproduce identically never gets accepted")
+    rows1 = [_kline_row("2026-07-10", 45000.0, 45500.0, 40_000.0, 44000.0)]
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: rows1})
+    r1 = oc.fetch_cycle_low(old_data={"low": 57800.19, "low_date": "2026-07-01"})
+    # next fetch: the glitch doesn't reproduce (source data reverts to the real, unchanged history)
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: KLINES_OK})
+    r2 = oc.fetch_cycle_low(old_data=r1)
+    ok("real data reasserts -> matches old accepted low, no false accept of the glitch", r2["low"] == 57800.19)
+    ok("no suspect / pending carried once real data reasserts itself", "low_suspect" not in r2 and "_pending_low" not in r2)
+
+
+def t_cycle_ath_guarded_symmetrically():
+    print("· fetch_cycle_low: ath is now guarded the same way as low (fixes the un-guarded ath gap)")
+    bad_ath_rows = [_kline_row("2026-07-01", 60000.0, 600_000.0, 58000.0, 59000.0)]  # absurd high, out of ANCHOR_GUARD['cycle_ath'] band
+    oc._get_json = fake_responses({oc.BINANCE_KLINES_URL: bad_ath_rows})
+    r = oc.fetch_cycle_low(old_data={"low": 57800.19, "low_date": "2026-07-01", "ath": 126199.63, "ath_date": "2025-10-06"})
+    ok("out-of-band ath rejected, old ath kept", r["ath"] == 126199.63)
+    ok("ath_suspect flag set", r.get("ath_suspect") is True)
+
+
+def t_fetch_daily_bars_paginates_full_pages():
+    print("· _fetch_daily_bars: pages past Binance's 1000-bar cap instead of silently truncating (fixes DD)")
+    base_ms = int(datetime(2020, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+    day_ms = 86_400_000
+    page1 = [[base_ms + i * day_ms, 100.0, 110.0, 90.0, 105.0, "1.0", base_ms + i * day_ms + day_ms - 1, "0", 0, "0", "0", "0"]
+             for i in range(1000)]   # full 1000-row page (oldest-first, matches real Binance ordering)
+    page2 = [_kline_row("2026-07-01", 58000.0, 61000.0, 57_800.19, 60000.0)]  # short page -> the real recent low, must not be dropped
+    calls = {"n": 0}
+
+    def paged(url, timeout=10):
+        calls["n"] += 1
+        return page1 if calls["n"] == 1 else page2
+    oc._get_json = paged
+    bars = oc._fetch_daily_bars(oc.CYCLE_WINDOW_START)
+    ok("two pages fetched (full 1000-row page triggers a follow-up request)", calls["n"] == 2)
+    ok("total bars = both pages combined, nothing silently dropped", len(bars) == 1001)
+    ok("the short 2nd page's recent low is present (would be missing before the pagination fix)",
+       any(d == "2026-07-01" and low == 57800.19 for d, _, low in bars))
+
+
+def t_cycle_low_source_in_refresh():
+    print("· cycle_low source enters refresh + keeps old on failure")
+    with tempfile.TemporaryDirectory() as d:
+        p = pathlib.Path(d) / "cache.json"
+        oc._get_json = fake_responses({**BRK_OK, **FNG_OK, "https://mempool.space": 953036, oc.BINANCE_KLINES_URL: KLINES_OK})
+        c = oc.refresh(now=NOW, path=p)
+        ok("cycle_low ok:True", c["cycle_low"]["ok"] is True)
+        ok("cycle_low.data.low correct", c["cycle_low"]["data"]["low"] == 57800.19)
+        first_low = c["cycle_low"]["data"]["low"]
+        # second round: Binance klines source down -> cycle_low keeps old
+        later = datetime.fromisoformat("2026-06-11T10:00:00+10:00")
+        oc._get_json = fake_responses({**BRK_OK, **FNG_OK, "https://mempool.space": 953036})
+        c2 = oc.refresh(now=later, path=p)
+        ok("klines source down -> cycle_low ok:False", c2["cycle_low"]["ok"] is False)
+        ok("cycle_low keeps old low value (not empty)", c2["cycle_low"]["data"]["low"] == first_low)
+        ok("cycle_low fetched_at keeps old time (honest staleness)", c2["cycle_low"]["fetched_at"].startswith("2026-06-06"))
+
+
 if __name__ == "__main__":
     t_all_ok()
     t_partial_fail_keeps_old()
@@ -332,4 +474,15 @@ if __name__ == "__main__":
     t_dd013_halving_boundary()
     t_dd013_height_sanity_band()
     t_dd013_cycle_source_in_refresh()
+    # cycle low
+    t_cycle_low_compute_pure()
+    t_cycle_low_fetch_basic()
+    t_cycle_low_guard_out_of_band()
+    t_cycle_low_guard_daily_jump()
+    t_cycle_low_jump_confirmed_second_fetch()
+    t_cycle_low_glitch_never_confirms()
+    t_cycle_ath_guarded_symmetrically()
+    t_fetch_daily_bars_paginates_full_pages()
+    t_cycle_low_no_data_raises()
+    t_cycle_low_source_in_refresh()
     print(f"✓ onchain_signals: all {PASS} assertions passed")

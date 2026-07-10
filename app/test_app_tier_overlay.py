@@ -247,6 +247,43 @@ check("cycle.data is None -> halving is None", cyc3.get("halving") is None)
 check("bear-low still present", cyc3.get("bear_low_date") == "2026-10-05")
 
 
+# ════════════════════════════════════════════════════════════════════
+# Cycle low + diminishing-returns indicator: build_dashboard injects cycle_low/decay (read-only)
+# ════════════════════════════════════════════════════════════════════
+print("▶ a13_cycle_low_injected: cache has cycle_low -> payload.cycle_low + payload.decay both populated")
+st_l = _seed_state()
+cache_cl = {**_cache(), "cycle_low": {"ok": True, "fetched_at": "2026-07-02T01:00:00+10:00",
+            "data": {"low": 57800.19, "low_date": "2026-07-01", "ath": 126199.63, "ath_date": "2025-10-06"}}}
+_patch(spot=63_400.0, cache=cache_cl)
+pay_l = A.build_dashboard(st_l)
+cl = pay_l.get("cycle_low") or {}
+check("payload contains cycle_low dict", isinstance(cl, dict) and bool(cl))
+check("cycle_low.low passed through", cl.get("low") == 57800.19)
+check("cycle_low.low_date passed through", cl.get("low_date") == "2026-07-01")
+check("cycle_low.ath passed through", cl.get("ath") == 126199.63)
+check("cycle_low.fetched_at passed through (frontend staleness indicator)", cl.get("fetched_at") == "2026-07-02T01:00:00+10:00")
+dc = pay_l.get("decay") or {}
+check("payload contains decay dict", isinstance(dc, dict) and bool(dc))
+check("decay.low == cycle_low.low", dc.get("low") == round(57800.19))
+check("decay.spot == live spot (63,400)", dc.get("spot") == 63_400)
+check("decay zone reflects spot vs low (spot well above low -> not below_low)", dc.get("zone") != "below_low")
+
+print("▶ a14_cycle_low_backward_compat: no cycle_low in cache -> cycle_low/decay both None (never fabricated)")
+st_l2 = _seed_state()
+_patch(spot=63_400.0)   # default _cache() has no cycle_low section (= old cache or first-day cron not yet run)
+pay_l2 = A.build_dashboard(st_l2)
+check("no cycle_low cache -> cycle_low is None", pay_l2.get("cycle_low") is None)
+check("no cycle_low cache -> decay is None (never computed from a fabricated low)", pay_l2.get("decay") is None)
+
+print("▶ a15_cycle_low_partial_cache: cycle_low section has no low (fetch failed) -> cycle_low/decay both None")
+st_l3 = _seed_state()
+cache_cl_bad = {**_cache(), "cycle_low": {"ok": False, "fetched_at": "", "data": None}}
+_patch(spot=63_400.0, cache=cache_cl_bad)
+pay_l3 = A.build_dashboard(st_l3)
+check("cycle_low.data is None -> cycle_low is None", pay_l3.get("cycle_low") is None)
+check("cycle_low.data is None -> decay is None", pay_l3.get("decay") is None)
+
+
 print(f"\n{'=' * 44}\nPassed {PASS} · Failed {FAIL}")
 import sys  # noqa: E402
 sys.exit(1 if FAIL else 0)

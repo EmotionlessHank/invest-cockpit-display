@@ -16,6 +16,7 @@ Design principles:
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from dataclasses import dataclass
@@ -779,6 +780,71 @@ def onchain_resonance(cards: list[dict]) -> dict:
     if vdd_hit and pl_hit:
         return {"active": True, "label": "🏆 Dual Bear-Bottom Confirmation (VDD Pulse + P/L Crossover) · accelerate B3/C tier accumulation"}
     return {"active": False, "label": ""}
+
+
+# ── Diminishing-returns indicator ────────────────────────────────────────
+# Historical halving-cycle bottom -> top multiples (2015 / 2018 / 2021 / 2022 tops), used to
+# extrapolate this cycle's target-price band from the current cycle low via the ln(multiple)
+# decay pattern: across cycles, the *drop* in ln(multiple) shrinks by a roughly constant ratio
+# (empirically ~0.54). Purely a historical-pattern extrapolation, not a price prediction —
+# the resulting band is used only to gauge where the current price sits (risk framing), never
+# to size orders or gate strategy decisions.
+CYCLE_HISTORY = [
+    {"round": 1, "bottom": 152, "top": 19_800},      # 2015-01 -> 2017-12
+    {"round": 2, "bottom": 3_200, "top": 69_000},     # 2018-12 -> 2021-11
+    {"round": 3, "bottom": 15_500, "top": 126_210},   # 2022-11 -> 2025-10
+]
+DECAY_MULTIPLE_CONSERVATIVE = 3.0   # Conservative next-cycle multiple (article's floor of the band)
+DECAY_MULTIPLE_AGGRESSIVE = 7.0     # Aggressive next-cycle multiple (article's ceiling of the band)
+
+
+def _decay_center_multiple(history: list[dict] | None = None) -> float:
+    """Derive the next-cycle *center* multiple from CYCLE_HISTORY via the ln(multiple)
+    difference-ratio decay pattern (recomputed from the table rather than hardcoded, so it stays
+    consistent if CYCLE_HISTORY is ever revised). With 3 historical cycles this reduces to a
+    single ratio between the two successive ln-drops (~0.54); currently yields ≈4.8x."""
+    history = history or CYCLE_HISTORY
+    lns = [math.log(c["top"] / c["bottom"]) for c in history]
+    diffs = [lns[i] - lns[i + 1] for i in range(len(lns) - 1)]
+    if len(diffs) < 2:
+        return math.exp(lns[-1])
+    ratio = diffs[-1] / diffs[-2]
+    return math.exp(lns[-1] - diffs[-1] * ratio)
+
+
+def decay_indicator(low: float | None, spot: float) -> dict | None:
+    """Diminishing-returns indicator: maps the current spot price onto a target-price band
+    extrapolated from this cycle's low (see _decay_center_multiple), and marks which zone the
+    spot price falls in — the closer to/beyond the aggressive target, the more the historical
+    upside has already been consumed and the higher the chase-risk.
+    Returns None when no cycle-low reading is available yet (never fabricates a low).
+    `frac` is the spot's position along the low -> aggressive-target band, clamped to [0, 1],
+    split into three equal thirds (low->conservative / conservative->center / center->aggressive)
+    for the position-bar UI."""
+    if not low or low <= 0:
+        return None
+    center_multiple = _decay_center_multiple()
+    conservative = low * DECAY_MULTIPLE_CONSERVATIVE
+    center = low * center_multiple
+    aggressive = low * DECAY_MULTIPLE_AGGRESSIVE
+    if spot <= low:
+        frac, zone, sem = 0.0, "below_low", "green"
+    elif spot <= conservative:
+        frac = (spot - low) / (conservative - low) / 3
+        zone, sem = "low_conservative", "green"
+    elif spot <= center:
+        frac = 1 / 3 + (spot - conservative) / (center - conservative) / 3
+        zone, sem = "conservative_center", "amber"
+    elif spot <= aggressive:
+        frac = 2 / 3 + (spot - center) / (aggressive - center) / 3
+        zone, sem = "center_aggressive", "red"
+    else:
+        frac, zone, sem = 1.0, "above_aggressive", "rust"
+    return {
+        "low": round(low), "conservative": round(conservative), "center": round(center),
+        "aggressive": round(aggressive), "center_multiple": round(center_multiple, 2),
+        "spot": round(spot), "frac": round(min(1.0, max(0.0, frac)), 4), "zone": zone, "sem": sem,
+    }
 
 
 def render_confirm_message(d: WeeklyDecision) -> str:

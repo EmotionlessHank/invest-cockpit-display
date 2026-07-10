@@ -8,6 +8,9 @@ Data sources (all free, no API key required):
                             cannot back-test bear-market bottoms, so it is excluded).
                             Additionally: 200WMA, realized_price (dip anchor, covered by R6 guard).
   · alternative.me /fng   — Fear & Greed Index
+  · Binance klines        — cycle low/ATH (daily high/low since CYCLE_WINDOW_START; same source
+                            app.py already uses for spot/30d chart, keeps all displayed BTC prices
+                            on one consistent data source).
 
 Design:
   - This file fetches only — it does not judge: raw readings are pulled and written to cache;
@@ -35,7 +38,7 @@ import os
 import pathlib
 import sys
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 HERE = pathlib.Path(__file__).parent
 
@@ -87,6 +90,8 @@ HIST_DAYS = 30
 ANCHOR_GUARD: dict[str, tuple[float, float]] = {
     "wma200":         (20_000, 150_000),   # 200WMA: wide historical range, currently ~$61K
     "realized_price": (10_000, 150_000),   # On-chain realized price (C2 / double|enhanced anchor): currently ~$53.6K
+    "cycle_low":      (20_000, 130_000),   # This cycle's lowest daily low (Binance spot); same band as wma200
+    "cycle_ath":      (50_000, 500_000),   # This cycle's ATH (currently ~$126K); wide upper bound — decay_indicator's own aggressive target already projects up to ~$400K
 }
 ANCHOR_JUMP_THRESHOLD = 0.20  # Single-day jump >20% → flag as suspect
 
@@ -190,6 +195,111 @@ def fetch_fng() -> dict:
     return {"value": int(item["value"]), "label": str(item.get("value_classification", ""))}
 
 
+# ── Cycle low: lowest price reached so far this halving cycle ──────────────
+# Scan window start: a few weeks before this cycle's confirmed ATH (2025-10-06, Binance BTCUSDT
+# daily high $126,199.63 — cross-checked against third-party reporting of ~$126,210), wide enough
+# that the ATH itself is always inside the scanned range even if the exact top date is revisited.
+# This is a fixed historical anchor (like BEAR_LOW_DATE in app.py) — it does not need to auto-update
+# because a new all-time high has not occurred since; if one ever does, bump this constant.
+CYCLE_WINDOW_START = "2025-09-01"
+BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+
+
+def _fetch_daily_bars(start_date: str) -> list[tuple[str, float, float]]:
+    """Daily (date, high, low) tuples since start_date, from Binance BTCUSDT spot klines
+    (same source app.py already uses for spot/30d chart — keeps all displayed BTC prices
+    on one consistent data source instead of mixing in a second exchange/index).
+    Paginates past Binance's 1000-bar-per-request cap: without this, a single startTime-only
+    request silently returns the OLDEST 1000 days in range (not the most recent), so once the
+    scan window exceeds ~1000 days the response would stop covering "today" at all, with no
+    error — the ATH/cycle-low would silently freeze. Each page requests from the last bar's
+    close forward; a page shorter than 1000 rows means we've caught up to the present."""
+    start_ms = int(datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
+    out = []
+    while True:
+        rows = _get_json(f"{BINANCE_KLINES_URL}?symbol=BTCUSDT&interval=1d&startTime={start_ms}&limit=1000")
+        if not rows:
+            break
+        for r in rows:
+            d = datetime.fromtimestamp(int(r[0]) / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+            out.append((d, float(r[2]), float(r[3])))  # high=r[2], low=r[3]
+        if len(rows) < 1000:
+            break
+        start_ms = int(rows[-1][0]) + 1
+    return out
+
+
+def compute_cycle_extremes(daily_bars: list[tuple[str, float, float]]) -> dict | None:
+    """Pure function: given (date, high, low) tuples, return the ATH (max high) and cycle
+    low (min low), each with the date it occurred on. None if given no data."""
+    if not daily_bars:
+        return None
+    ath_date, ath = max(((d, h) for d, h, _ in daily_bars), key=lambda x: x[1])
+    low_date, low = min(((d, l) for d, _, l in daily_bars), key=lambda x: x[1])
+    return {"ath": round(ath, 2), "ath_date": ath_date, "low": round(low, 2), "low_date": low_date}
+
+
+def _debounced_extreme(guard_key: str, candidate: float, candidate_date: str,
+                        old_val: float | None, old_date: str | None,
+                        pending: dict | None) -> tuple[float | None, str | None, dict | None, bool]:
+    """Sanity-band + 2-fetch-confirmation guard for a running min/max extreme (cycle low / ATH).
+
+    A candidate outside ANCHOR_GUARD[guard_key] is rejected outright (old value kept, no pending
+    state carried forward).
+
+    A candidate that clears the sanity band but jumps >ANCHOR_JUMP_THRESHOLD from old_val is NOT
+    rejected outright the way a point-in-time anchor (wma200/realized_price) would be. cycle low
+    and ATH are running extremes recomputed from the *full* historical window on every fetch — a
+    genuine large move (e.g. a real flash-crash day) keeps recomputing to the exact same value on
+    every subsequent fetch, so a plain "reject forever vs. the stale old value" guard would freeze
+    the reading permanently after any big single-day move, with no path back to reality. A one-off
+    bad tick from a single flaky request won't reproduce identically on retry, so it never clears
+    this check. Net effect: a real move is accepted one fetch cycle later (once seen twice in a
+    row); a glitch is rejected forever.
+
+    Returns (value, date, pending_to_persist, suspect)."""
+    lo, hi = ANCHOR_GUARD[guard_key]
+    if not (lo <= candidate <= hi):
+        return old_val, old_date, None, True
+    if old_val is None or candidate == old_val or (old_val != 0 and abs(candidate - old_val) / abs(old_val) <= ANCHOR_JUMP_THRESHOLD):
+        return candidate, candidate_date, None, False
+    if pending and pending.get("v") == candidate:
+        return candidate, candidate_date, None, False
+    return old_val, old_date, {"v": candidate, "d": candidate_date}, True
+
+
+def fetch_cycle_low(old_data: dict | None = None) -> dict:
+    """Cycle-low reading: scan daily bars since CYCLE_WINDOW_START and report the lowest low
+    reached so far (plus the cycle ATH for context). Pure fetch, no judgement — mirrors
+    fetch_brk / fetch_fng; downstream risk framing lives in strategy.py.
+
+    Both `low` and `ath` go through the same _debounced_extreme guard (ANCHOR_GUARD["cycle_low"] /
+    ["cycle_ath"]) — a single bad tick in the scanned range must not corrupt the whole-window
+    extreme, in either direction. old_data is the data dict from the last successful fetch;
+    pass None on the first fetch."""
+    old_data = old_data or {}
+    bars = _fetch_daily_bars(CYCLE_WINDOW_START)
+    extremes = compute_cycle_extremes(bars)
+    if extremes is None:
+        raise RuntimeError("no kline data returned")
+    low, low_date, low_pending, low_suspect = _debounced_extreme(
+        "cycle_low", extremes["low"], extremes["low_date"],
+        old_data.get("low"), old_data.get("low_date"), old_data.get("_pending_low"))
+    ath, ath_date, ath_pending, ath_suspect = _debounced_extreme(
+        "cycle_ath", extremes["ath"], extremes["ath_date"],
+        old_data.get("ath"), old_data.get("ath_date"), old_data.get("_pending_ath"))
+    result = {"ath": ath, "ath_date": ath_date, "low": low, "low_date": low_date}
+    if low_pending:
+        result["_pending_low"] = low_pending
+    if ath_pending:
+        result["_pending_ath"] = ath_pending
+    if low_suspect:
+        result["low_suspect"] = True
+    if ath_suspect:
+        result["ath_suspect"] = True
+    return result
+
+
 # ── Cycle clock: halving estimate ─────────────────────────────────────────
 def estimate_halving(height: int, now: datetime) -> dict:
     """Pure function: estimate the next halving date from the current block height.
@@ -226,7 +336,7 @@ def fetch_cycle(now: datetime | None = None) -> dict:
     return estimate_halving(_fetch_block_height(), now)
 
 
-SOURCES = {"brk": fetch_brk, "fng": fetch_fng, "cycle": fetch_cycle}
+SOURCES = {"brk": fetch_brk, "fng": fetch_fng, "cycle": fetch_cycle, "cycle_low": fetch_cycle_low}
 
 
 # ── Cache read/write ──────────────────────────────────────────────────────
@@ -254,9 +364,9 @@ def refresh(now: datetime | None = None, path: pathlib.Path = None) -> dict:
     cache = {k: v for k, v in load_cache(path).items() if k in SOURCES}
     for name, fn in SOURCES.items():
         try:
-            # For brk: pass old data so the R6 single-day jump guard can compare against it
+            # For brk / cycle_low: pass old data so the R6 single-day jump guard can compare against it
             old_entry = cache.get(name) or {}
-            if name == "brk":
+            if name in ("brk", "cycle_low"):
                 data = fn(old_data=old_entry.get("data"))
             elif name == "cycle":
                 data = fn(now=now)   # Pass refresh's now through so est_date baseline matches fetched_at

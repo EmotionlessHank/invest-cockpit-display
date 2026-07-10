@@ -193,5 +193,41 @@ d = decide_weekly(ctx(btc=63000, invested=50000, window_end=None))
 check("legacy fixed-tier d.weeks == 0 (backward compatible)", d.weeks == 0, str(d.weeks))
 
 
+# ══ Diminishing-returns indicator (decay_indicator) ══════════════════════════
+print("▶ t_decay_center_multiple: derived from CYCLE_HISTORY via ln-diff-ratio decay ≈4.8x")
+cm = strategy._decay_center_multiple()
+check("center multiple ≈4.8x (matches the article's ~0.54 decay-ratio extrapolation)",
+      abs(cm - 4.8) < 0.05, str(cm))
+
+print("▶ t_decay_indicator_targets: low=$57,800 → 3x/center/7x target band")
+di = strategy.decay_indicator(57_800, 57_800)
+check("conservative target = 3x low", di["conservative"] == round(57_800 * 3))
+check("aggressive target = 7x low", di["aggressive"] == round(57_800 * 7))
+check("center target ≈ 4.8x low", abs(di["center"] - 57_800 * cm) <= 1)
+check("no cycle-low reading → None (never fabricates a low)", strategy.decay_indicator(None, 60_000) is None)
+check("low<=0 → None", strategy.decay_indicator(0, 60_000) is None)
+
+print("▶ t_decay_indicator_zones: spot position maps to the right zone/sem/frac across the band")
+low = 57_800
+d_at_low = strategy.decay_indicator(low, low)
+check("spot==low → below_low zone, frac=0, green", d_at_low["zone"] == "below_low" and d_at_low["frac"] == 0 and d_at_low["sem"] == "green")
+d_below = strategy.decay_indicator(low, low * 0.9)
+check("spot<low (new low intraday) → clamped to frac=0, still below_low/green", d_below["zone"] == "below_low" and d_below["frac"] == 0)
+d_mid_low = strategy.decay_indicator(low, low * 2)   # between low and 3x
+check("between low and conservative(3x) → low_conservative/green, frac in (0, 1/3)",
+      d_mid_low["zone"] == "low_conservative" and d_mid_low["sem"] == "green" and 0 < d_mid_low["frac"] < 1 / 3)
+d_at_cons = strategy.decay_indicator(low, low * 3)
+check("spot==3x → frac==1/3 (boundary; output is rounded to 4dp)", abs(d_at_cons["frac"] - 1 / 3) < 1e-4)
+d_mid_center = strategy.decay_indicator(low, low * 4)   # between 3x and ~4.8x center
+check("between conservative(3x) and center(~4.8x) → conservative_center/amber",
+      d_mid_center["zone"] == "conservative_center" and d_mid_center["sem"] == "amber" and 1 / 3 < d_mid_center["frac"] < 2 / 3)
+d_mid_agg = strategy.decay_indicator(low, low * 6)   # between center(~4.8x) and 7x
+check("between center and aggressive(7x) → center_aggressive/red",
+      d_mid_agg["zone"] == "center_aggressive" and d_mid_agg["sem"] == "red" and 2 / 3 < d_mid_agg["frac"] < 1.0)
+d_over = strategy.decay_indicator(low, low * 9)   # beyond 7x
+check("beyond aggressive(7x) → above_aggressive/rust, frac clamped to 1.0",
+      d_over["zone"] == "above_aggressive" and d_over["sem"] == "rust" and d_over["frac"] == 1.0)
+
+
 print(f"\n{'=' * 40}\nPassed {PASS} · Failed {FAIL}")
 sys.exit(1 if FAIL else 0)

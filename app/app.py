@@ -324,6 +324,17 @@ def build_dashboard(st: dict) -> dict:
                     if cd.get("est_date") else None),
     }
 
+    # Cycle low (this cycle's lowest price so far): read-only from the onchain cache
+    # (written by daily cron --fetch, see onchain_signals.fetch_cycle_low); never fetched here.
+    # No cache / fetch failure -> cycle_low/decay both None, page stays populated.
+    cl_sec = oc_cache.get("cycle_low") or {}
+    cld = cl_sec.get("data") or {}
+    cycle_low = ({"low": cld["low"], "low_date": cld.get("low_date"),
+                  "ath": cld.get("ath"), "ath_date": cld.get("ath_date"),
+                  "fetched_at": cl_sec.get("fetched_at", "")}
+                 if cld.get("low") else None)
+    decay = strategy.decay_indicator(cld.get("low"), spot) if cld.get("low") else None
+
     return {
         "updated": st["updated"],
         "badge": f"Price in {cur} zone" if cur else "Not in dip-buy zone",
@@ -355,6 +366,8 @@ def build_dashboard(st: dict) -> dict:
         "rate": rate,
         "rate_source": rate_source,
         "cycle": cycle,
+        "cycle_low": cycle_low,
+        "decay": decay,
     }
 
 

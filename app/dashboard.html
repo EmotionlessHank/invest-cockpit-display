@@ -108,10 +108,10 @@ tr.now td{background:var(--th-bg)}
 .oc{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}   /* minmax(0,…)：列可收缩，nowrap 文字走 ellipsis 而非撑开 grid（H5 适配）*/
 @media (max-width:480px){.oc{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
 .oc .card{padding:12px 11px}
-.oc .card.tap{cursor:pointer}
+.card.tap,.chart-card.tap{cursor:pointer}
 .oc .lab{font-size:11px;color:var(--tert);margin-bottom:8px;display:flex;align-items:center;gap:4px}
 .oc .lab .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.oc .inf{flex:none;width:12px;height:12px;color:var(--tert);opacity:.7}
+.inf{flex:none;width:12px;height:12px;color:var(--tert);opacity:.7}
 /* 指标解释抽屉 */
 #sigSheet{max-height:82vh;overflow-y:auto}
 .sig-status{font-size:13px;font-weight:600;margin:-4px 0 12px}
@@ -210,6 +210,8 @@ tr.now td{background:var(--th-bg)}
   <div class="kpis" id="kpis"></div>
   <div class="sec" id="cycle-sec" hidden><span data-i18n="sec.cycle"></span> <span class="dim" style="font-weight:400" data-i18n="sec.cycle.hint"></span></div>
   <div class="kpis" id="cycle" hidden></div>
+  <div class="sec" id="decay-sec" hidden><span data-i18n="sec.decay"></span> <span class="dim" style="font-weight:400" data-i18n="sec.decay.hint"></span></div>
+  <div class="chart-card tap" id="decay-card" hidden style="padding:22px 14px 12px"><div class="mnavbar" id="decay-bar"></div><div class="mnavnote" id="decay-note"></div></div>
   <div class="sec" data-i18n="sec.budget"></div>
   <div class="ammo" id="ammo"></div>
   <div class="sec" id="extra-sec" hidden><span data-i18n="sec.extra"></span> <span class="dim" style="font-weight:400" data-i18n="sec.extra.hint"></span></div>
@@ -280,6 +282,7 @@ const I18N = {
     'quote.prefix':'Quote ','quote.idle':'Quote —',
     'seg.btc':'BTC Plan','seg.mstr':'MSTR Plan',
     'sec.cycle':'Cycle Clock','sec.cycle.hint':'Potential low · Halving countdown',
+    'sec.decay':'Diminishing-returns Gauge','sec.decay.hint':'Target band extrapolated from the cycle low · chase-risk marker',
     'sec.budget':'Budget & Ammo Allocation',
     'sec.extra':'Off-book Ammo','sec.extra.hint':'Funds beyond the main budget',
     'sec.chart':'Price Trend vs Buy-the-dip Tiers',
@@ -300,9 +303,16 @@ const I18N = {
     'fab.record':'✏️ Add Entry',
     'sig.foot':'Based on on-chain bottom indicators · Personal monitoring only, not investment advice',
     'sheet.title':'Add Entry','sheet.submit':'Confirm Entry',
-    'kpi.held_btc':'BTC Held','kpi.invested_suffix':'invested',
+    'kpi.held_btc':'BTC Held','kpi.invested_suffix':'invested','kpi.avg_cost_inline':'Avg $',
     'kpi.avg_cost':'Avg Cost','kpi.avg_cost_sub':'Full-position basis',
+    'kpi.cycle_low':'Cycle Low','cycle_low.na':'No reading yet','cycle_low.drawdown_prefix':'ATH drawdown ',
     'kpi.spot':'Spot Price','kpi.spot_sub_prefix':'In ','kpi.pnl':'Unrealized P&L',
+    'decay.zone.low':'Low zone','decay.zone.mid':'Center zone','decay.zone.high':'High zone',
+    'decay.tap_hint':'Tap for details',
+    'decay.status.below_low':'At/below the cycle low','decay.status.low_conservative':'Early cycle · favorable risk/reward',
+    'decay.status.conservative_center':'Approaching the center target · upside narrowing',
+    'decay.status.center_aggressive':'Nearing the aggressive target · diminishing returns',
+    'decay.status.above_aggressive':'Beyond the aggressive target · high chase-risk',
     'rate.fallback':'fallback ',
     'tier.current':'●Current','leg.filled':'Filled','leg.waiting':'Waiting','leg.open':'Open',
     'tier.tick_aria_a':'Mark ','tier.tick_aria_b':' filled and record',
@@ -368,6 +378,7 @@ const I18N = {
     'quote.prefix':'行情 ','quote.idle':'行情 —',
     'seg.btc':'BTC 计划','seg.mstr':'MSTR 计划',
     'sec.cycle':'周期时钟','sec.cycle.hint':'潜在低点 · 减半倒计时',
+    'sec.decay':'周期收益递减','sec.decay.hint':'低点外推目标价带 · 追高风险提示',
     'sec.budget':'预算 & 弹药分布',
     'sec.extra':'编外弹药','sec.extra.hint':'主仓预算之外的资金来源',
     'sec.chart':'价格走势 vs 抄底档位',
@@ -388,9 +399,16 @@ const I18N = {
     'fab.record':'✏️ 记一笔',
     'sig.foot':'依据链上底部指标 · 仅个人监控，非投资建议',
     'sheet.title':'记一笔','sheet.submit':'确认记账',
-    'kpi.held_btc':'持仓 BTC','kpi.invested_suffix':'投入',
+    'kpi.held_btc':'持仓 BTC','kpi.invested_suffix':'投入','kpi.avg_cost_inline':'均价 $',
     'kpi.avg_cost':'建仓均价','kpi.avg_cost_sub':'满仓成本口径',
+    'kpi.cycle_low':'周期低点','cycle_low.na':'暂无读数','cycle_low.drawdown_prefix':'较 ATH 回撤 ',
     'kpi.spot':'当前现价','kpi.spot_sub_prefix':'落 ','kpi.pnl':'浮动盈亏',
+    'decay.zone.low':'低位区','decay.zone.mid':'中枢区','decay.zone.high':'高位区',
+    'decay.tap_hint':'点击查看说明',
+    'decay.status.below_low':'处于/低于周期低点','decay.status.low_conservative':'早周期 · 性价比区间',
+    'decay.status.conservative_center':'接近外推中枢 · 收益空间收窄',
+    'decay.status.center_aggressive':'逼近激进目标 · 收益递减明显',
+    'decay.status.above_aggressive':'已超出激进目标 · 追高风险高',
     'rate.fallback':'兜底',
     'tier.current':'●当前','leg.filled':'已成交','leg.waiting':'待触发','leg.open':'挂单中',
     'tier.tick_aria_a':'标记 ','tier.tick_aria_b':' 已成交并记账',
@@ -495,10 +513,12 @@ const SAMPLE={updated:"2026-06-03 14:20",badge:"Price in B2 zone",
       {lo:55000,hi:60000,name:"B3 Green Line",sem:"green",key:1},{lo:52000,hi:55000,name:"C1 Deep Drop",sem:"red",key:0},{lo:48000,hi:52000,name:"C2 Deep Drop",sem:"red",key:0}]},
   action:{l1:"Weekly DCA advice (Cautious · recent dip-buy → downgraded)",l2:"Buy manually ¥3,000 ≈ $428 USDT",l3:"🎯 Next watch: B2 Core $60–66K"},
   weekly:{action:"BUY",tier:"Cautious",amount_rmb:3000,amount_usdt:428,downgraded:true,done_this_week:false,done_at:"",skip_reason:""},
-  cycle:{bear_low_date:"2026-10-05",halving:{est_date:"2028-04-15",blocks_remaining:96964,height:953036,fetched_at:"2026-06-10T01:00:00"}}};
+  cycle:{bear_low_date:"2026-10-05",halving:{est_date:"2028-04-15",blocks_remaining:96964,height:953036,fetched_at:"2026-06-10T01:00:00"}},
+  cycle_low:{low:57800.19,low_date:"2026-07-01",ath:126199.63,ath_date:"2025-10-06",fetched_at:"2026-07-02T01:00:00"},
+  decay:{low:57800,conservative:173400,center:278018,aggressive:404600,center_multiple:4.81,spot:63400,frac:0.0161,zone:"low_conservative",sem:"green"}};
 SAMPLE.chart.prices[29]=SAMPLE.chart.spot;
 const STATUS={done:["p-done","Filled"],open:["p-open","Open"],wait:["p-wait","Waiting"]};
-const CVAR={green:'--green',blue:'--blue',amber:'--amber',red:'--red',teal:'--teal-fg'};
+const CVAR={green:'--green',blue:'--blue',amber:'--amber',red:'--red',teal:'--teal-fg',rust:'--rust-fg'};
 // Indicator-explanation drawer: static copy dictionary (definitions based on on-chain bottom-signal research).
 // D3：时效性内容（具体读数/日期）不写死，正文只写规律，当前读数由 sigStatus 复用卡片实时 note/sub。
 const SIG_INFO_ALL={
@@ -526,7 +546,13 @@ read:"铁律——2015/2019/2022 三轮，二次探底的最低点无一例外�
 act:"<b>二、三叉之间 = 抄底主火力区</b>。币价右侧突破黑线 = 熊底确认 + 最后上车信号。"},
 cycle4:{what:"减半周期时间刻度指标，从 0 向 1 推进，触及 1.0 ≈ 历史熊底时点。",
 read:"读数越接近 1.0，距历史规律的熊底时间窗越近（当前读数见卡片）；与三叉筑底的时间路径互为印证。",
-act:"<b>临近 1.0 = 抄底警觉拉满</b>，预备双倍定投与第二档弹药；以 VDD 脉冲 + 盈亏相交双确认为执行扳机。"}},
+act:"<b>临近 1.0 = 抄底警觉拉满</b>，预备双倍定投与第二档弹药；以 VDD 脉冲 + 盈亏相交双确认为执行扳机。"},
+cycle_low:{what:"本轮减半周期至今市场实际触及过的最低价，数据来自 Binance BTCUSDT 日线（和现价同一数据源），每日自动扫描更新，不是预测值。",
+read:"多方信源交叉确认，本轮下跌的最低区间出现在 6 月下旬到 7 月初：6/25 前后受 Strategy 优先股事件冲击一度下探，7 月初进一步走低，创下约 21 个月新低，较 2025 年 10 月的周期高点回撤约五成。",
+act:"<b>这只是「本轮已发生的最低价」，不代表底部已经确认</b>。链上数据目前有分歧：一派认为已实现盈亏比率跌至 43 个月最低、长期持有者转向增持，支持「筑底」；另一派认为真正的链上成本基准尚未被跌破（历史上每轮周期底都会跌破这条线），推测真正的底可能要到 2026 年第四季度、目标区间更低才会出现。两派都基于可信数据源交叉验证，不构成定论，仅供参考。"},
+decay:{what:"按历史三轮减半周期的顶底涨幅衰减规律做的目标价外推：把当前价格标在「低点 → 目标价带」这条尺子上，越靠右代表历史规律下的潜在收益空间被消耗得越多、追高的性价比越低。",
+read:"历史三轮周期顶底倍数约 130x、21.6x、8.1x，逐轮衰减；用 ln(倍数) 差值比（≈0.54）外推下一轮，得到倍数区间 3x（保守）～7x（激进），中枢约 4.8x。以本轮周期低点为基数换算即为上方状态栏显示的目标价带。",
+act:"<b>现价越靠近周期低点，性价比越高；越接近或超过中枢/激进目标，收益递减越明显</b>。这套外推基于历史统计规律做类比，不是精确预测，仅供参考，不构成加减仓依据。"}},
 en:{
 sth_tmm:{what:"Red line = short-term holders' average cost; blue line = true market mean (the real entry cost of active investors after excluding dormant/lost coins).",
 read:"In a bull market price stays above both lines and the blue line acts as pullback support; the big rebound after the bear's first leg is usually capped by the red line. Red crossing below blue (inversion) = short-term holders deeply underwater, the market entering a long, thorough washout phase — a real bear needs red to fall well below blue.",
@@ -551,12 +577,19 @@ read:"An iron rule — across 2015/2019/2022, the double-bottom low fell, withou
 act:"<b>Between the 2nd and 3rd crosses = the main dip-buying firepower zone</b>. Price breaking above the black line on the right = bear-bottom confirmation + the last boarding signal."},
 cycle4:{what:"A halving-cycle time-scale indicator advancing from 0 toward 1; reaching 1.0 ≈ the historical bear-bottom timing.",
 read:"The closer the reading to 1.0, the nearer the historically-typical bear-bottom time window (current reading on the card); it cross-validates the Triple Bottom time path.",
-act:"<b>Approaching 1.0 = max dip-buy alertness</b>, prepare double DCA and second-tier ammo; use a VDD pulse + P/L cross double-confirmation as the execution trigger."}}};
+act:"<b>Approaching 1.0 = max dip-buy alertness</b>, prepare double DCA and second-tier ammo; use a VDD pulse + P/L cross double-confirmation as the execution trigger."},
+cycle_low:{what:"The lowest price this halving cycle has actually reached so far, from Binance BTCUSDT daily klines (the same source used for spot price) — auto-scanned daily, not a forecast.",
+read:"Multiple sources cross-confirm the low fell in late June to early July: a slide around 6/25 following the Strategy preferred-stock shock, then a further leg down in early July to a roughly 21-month low, about a 50% drawdown from the October 2025 cycle high.",
+act:"<b>This is only «the lowest price reached so far», not a confirmed bottom</b>. On-chain data is currently split: one camp cites the realized profit/loss ratio at a 43-month low and long-term holders re-accumulating as basing evidence; the other notes the true on-chain cost basis hasn't been undercut yet (every prior cycle low undercut it), putting the real bottom closer to Q4 2026 at a lower target. Both sides cite credible sources — neither is conclusive; reference only."},
+decay:{what:"A target-price extrapolation from the historical decay pattern of each halving cycle's top/bottom multiple: plots the current price on a «cycle low → target band» ruler — the further right, the more of the historical upside has already been used up, and the worse the risk/reward of chasing.",
+read:"The three historical cycles' top/bottom multiples were roughly 130x, 21.6x and 8.1x, decaying each round; extrapolating the next one via the ln(multiple) difference ratio (≈0.54) gives a 3x (conservative) to 7x (aggressive) band, centered around ≈4.8x. Converting from this cycle's low gives the target band shown in the status line above.",
+act:"<b>The closer to the cycle low, the better the risk/reward; the closer to or beyond the center/aggressive target, the more the diminishing-returns effect</b>. This extrapolation is a historical-pattern analogy, not a precise forecast, and is not a basis for sizing trades."}}};
 let SIG_INFO=SIG_INFO_ALL[LANG]||SIG_INFO_ALL.en;
 const SIG_BY_NAME={"Triple bottom":"trident","4-year cycle":"cycle4","Fear & Greed":"fng"};
 const sigKey=o=>SIG_INFO_ALL.en[o.key]?o.key:(SIG_BY_NAME[o.name]||"");
 const INF_SVG='<svg class="inf" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6.4"/><line x1="8" y1="7.2" x2="8" y2="11"/><circle cx="8" cy="4.9" r=".8" fill="currentColor" stroke="none"/></svg>';
 let OC_CARDS=[];
+let SIG_EXTRA={};   // 指标解释抽屉：onchain 网格之外的可点卡（cycle_low / decay），render() 内按需登记
 
 function render(d){
   RATE=d.rate>0?d.rate:7.0; RATE_SRC=d.rate_source||'fallback';
@@ -566,13 +599,32 @@ function render(d){
   {const b=$('badge');b.style.background='';b.style.color='';}
   $('updated').innerHTML=String(d.updated).replace(/[T ]/,'<br>').replace('+10:00','').slice(0,16).replace('<br>','<br>');
   const k=d.kpis;
+  const cl=d.cycle_low, dc=d.decay;
+  const clSub=cl?`${cl.low_date.slice(5)} · ${t('cycle_low.drawdown_prefix')}${Math.round((cl.ath-cl.low)/cl.ath*100)}%`:t('cycle_low.na');
   $('kpis').innerHTML=[
-    [t('kpi.held_btc'),k.held_btc.toFixed(4),'',yuan(k.invested)+' '+t('kpi.invested_suffix')],
-    [t('kpi.avg_cost'),'$'+k.avg_cost.toLocaleString(),'',t('kpi.avg_cost_sub')],
+    [t('kpi.held_btc'),k.held_btc.toFixed(4),'',`${t('kpi.avg_cost_inline')}${k.avg_cost.toLocaleString()} · ${yuan(k.invested)} ${t('kpi.invested_suffix')}`],
+    [t('kpi.cycle_low'),cl?'$'+cl.low.toLocaleString():'—','',clSub,cl?'cycle_low':null],
     [t('kpi.spot')+' <span class="conn-dot '+CONN+'"></span>','$'+k.spot.toLocaleString(),'blue',t('kpi.spot_sub_prefix')+d.badge.replace('Price in ','')],
     [t('kpi.pnl'),(k.pnl_pct>=0?'+':'−')+Math.abs(k.pnl_pct)+'%',k.pnl_pct>=0?'green':'red',(k.pnl_rmb>=0?'+':'−')+yuan(Math.abs(k.pnl_rmb))],
-  ].map(([l,v,c,s])=>`<div class="card kpi"><div class="lab">${l}</div><div class="val ${c}">${v}</div><div class="sub">${s}</div></div>`).join('');
+  ].map(([l,v,c,s,sig])=>`<div class="card kpi${sig?' tap':''}"${sig?` data-sig="${sig}"`:''}><div class="lab">${l}${sig?INF_SVG:''}</div><div class="val ${c}">${v}</div><div class="sub">${s}</div></div>`).join('');
+  // 指标解释抽屉：cycle_low / decay 是 onchain 网格之外的可点卡，登记进 SIG_EXTRA 供 openSig 兜底查找
+  SIG_EXTRA={};
+  if(cl){
+    const pct=Math.round((cl.ath-cl.low)/cl.ath*100);
+    SIG_EXTRA.cycle_low={icon:'📉',name:t('kpi.cycle_low'),sem:'teal',
+      note:`$${cl.low.toLocaleString()} · ${cl.low_date}`,
+      sub:`ATH $${cl.ath.toLocaleString()}(${cl.ath_date}) · ${t('cycle_low.drawdown_prefix')}${pct}%`};
+  }
+  if(dc){
+    const ZL={below_low:t('decay.status.below_low'),low_conservative:t('decay.status.low_conservative'),
+      conservative_center:t('decay.status.conservative_center'),center_aggressive:t('decay.status.center_aggressive'),
+      above_aggressive:t('decay.status.above_aggressive')};
+    SIG_EXTRA.decay={icon:'🎯',name:t('sec.decay'),sem:dc.sem,
+      note:ZL[dc.zone]||'',
+      sub:`$${dc.low.toLocaleString()} → 3x $${dc.conservative.toLocaleString()} / ${dc.center_multiple}x $${dc.center.toLocaleString()} / 7x $${dc.aggressive.toLocaleString()}`};
+  }
   renderCycle(d.cycle);
+  renderDecay(cl,dc);
   $('ammo').innerHTML=d.tracks.map(t=>{const p=t.quota?t.used/t.quota*100:0;
     return `<div class="row"><div class="top"><span class="name">${t.name}</span><span class="num">${yuan(t.used)} / ${yuan(t.quota)} · ${Math.round(p)}%</span></div><div class="bar"><span style="width:${p}%;background:var(${CVAR[t.color]})"></span></div></div>`}).join('');
   const curT=d.badge.replace('Price in ','').split(' ')[0];
@@ -707,6 +759,19 @@ function renderCycle(c){
     [t('cycle.halving'), hvVal, hvSub],
   ].map(([l,v,s])=>`<div class="card kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join('');
   sec.hidden=false;box.hidden=false;
+}
+
+// ───────── 收益递减指示器：周期低点外推目标价带上的现价位置条（复用 MSTR mNAV 位置条样式）─────────
+function renderDecay(cl,dc){
+  const sec=$('decay-sec'),card=$('decay-card');
+  if(!cl||!dc){sec.hidden=true;card.hidden=true;return;}   // 无低点读数（cron 未跑过/取数失败）→ 整块隐藏，不编造数字
+  sec.hidden=false;card.hidden=false;
+  const ZONES=[{sem:'green',label:t('decay.zone.low')},{sem:'amber',label:t('decay.zone.mid')},{sem:'red',label:t('decay.zone.high')}];
+  const bar=$('decay-bar');
+  bar.innerHTML=ZONES.map(z=>`<div class="z" style="flex:1;background:var(--${z.sem}-bg);color:var(--${z.sem}-fg)">${z.label}</div>`).join('');
+  const left=Math.max(1,Math.min(99,dc.frac*100));
+  bar.insertAdjacentHTML('beforeend',`<div class="mk" style="left:${left}%"></div><div class="mkd" style="left:${left}%">▼$${dc.spot.toLocaleString()}</div>`);
+  $('decay-note').textContent=`$${dc.low.toLocaleString()}(${cl.low_date.slice(5)}) → 3x $${dc.conservative.toLocaleString()} / ${dc.center_multiple}x $${dc.center.toLocaleString()} / 7x $${dc.aggressive.toLocaleString()} · ${t('decay.tap_hint')}`;
 }
 
 // ───────── 价格走势 vs 抄底档位（BTC / MSTR 通用；y 轴按数据动态取整）─────────
@@ -1047,7 +1112,8 @@ async function tickLeg(btn,force){
 // 指标解释弹层：onchain 容器事件委托（卡片每次 paint 重建，绑容器不绑卡）
 const escSig=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function openSig(k){
-  const o=OC_CARDS.find(c=>sigKey(c)===k), i=SIG_INFO[k]; if(!o||!i) return;
+  // onchain 网格卡先查，查不到（cycle_low / decay 这类 kpi 区/独立卡）再查 SIG_EXTRA 兜底
+  const o=OC_CARDS.find(c=>sigKey(c)===k)||SIG_EXTRA[k], i=SIG_INFO[k]; if(!o||!i) return;
   const neutral=o.sem==='wait'||!CVAR[o.sem];
   $('sigTitle').textContent=(o.icon?o.icon+' ':'')+o.name;
   $('sigStatus').innerHTML=`<span style="color:${neutral?'var(--soft)':`var(--${o.sem}-fg)`}">${escSig(o.note||'')}</span>${o.sub?` <span class="dim">· ${escSig(o.sub)}</span>`:''}`;
@@ -1056,6 +1122,8 @@ function openSig(k){
 }
 function closeSig(){$('sigMask').hidden=true;$('sigSheet').hidden=true;}
 $('onchain').addEventListener('click',e=>{const c=e.target.closest('[data-sig]');if(c)openSig(c.dataset.sig);});
+$('kpis').addEventListener('click',e=>{const c=e.target.closest('[data-sig]');if(c)openSig(c.dataset.sig);});
+$('decay-card').addEventListener('click',()=>openSig('decay'));
 $('sigClose').onclick=closeSig; $('sigMask').onclick=closeSig;
 $('recSubmit').onclick=()=>submitRecord(false);
 $('fab').hidden=false;
